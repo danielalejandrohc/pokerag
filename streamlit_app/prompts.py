@@ -24,20 +24,15 @@ def build_system_prompt(text_payload: dict) -> str:
     # The system prompt does three things:
     #   1. Restricts the LLM to database knowledge only (no hallucinated Pokedex entries).
     #   2. Tells it how to handle visual questions (use the artwork, not its training data).
-    #   3. Defines the SEARCH_POKEMON: syntax the ReAct loop in chat.py will intercept.
+    #   3. Points the model at the `search_pokemon` tool for lookups of other Pokemon.
     return f"""You are a Pokemon database assistant. Your ONLY source of knowledge about Pokemon \
 is the database record below. Do NOT use any knowledge from your training data about Pokemon.
 
 If the user asks about visual appearance, base your answer solely on the official artwork image \
 provided at conversation start and the physical attributes listed below.
 
-If the user asks about other Pokemon not in the record below, you MUST look them up first by \
-outputting exactly this on its own line (replace <query> with the Pokemon name or description):
-
-SEARCH_POKEMON: <query>
-
-Then wait — the search result will be provided and you can answer using it. \
-Never answer questions about other Pokemon from memory.
+If the user asks about other Pokemon not in the record below, you MUST call the `search_pokemon` \
+tool to look them up first. Never answer questions about other Pokemon from memory.
 
 If information is not in the database, say "That information is not in the database."
 

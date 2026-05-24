@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import streamlit as st
+from langchain_core.tools import tool
 from PIL import Image
 from qdrant_client.models import FieldCondition, Filter, MatchValue
 
@@ -139,45 +140,41 @@ def fetch_pokemon_context(name: str) -> dict:
 
 # ── Tool used by the chat ReAct loop ──────────────────────────────────────────
 
-@st.cache_resource
-def get_search_fn():
-    """Return a callable the LLM can invoke to look up other Pokemon.
+@tool
+def search_pokemon(query: str) -> str:
+    """Search the Pokemon database for Pokemon matching the query.
 
-    Wrapped in cache_resource so the closure (and its reference to the Qdrant
-    client) is only created once per server process.
+    Use this when the user asks about a Pokemon that is not in the current
+    conversation's database record. The query can be a Pokemon name
+    (e.g. "charizard") or a description (e.g. "yellow electric mouse").
+    Returns up to 3 matches with name, types, abilities, base stats,
+    height, weight, and moves.
     """
-    def _search(query: str) -> str:
-        # Embed the query and find the 3 most relevant Pokemon.
-        # Fetching "data" here (unlike TEXT_PAYLOAD) is intentional — the tool
-        # needs the full moves list to give the LLM complete information.
-        vec = next(iter(get_text_embed_model().embed([query]))).tolist()
-        hits = get_qdrant().query_points(
-            collection_name=COLLECTION_TEXT,
-            query=vec,
-            limit=3,
-            with_payload=["name", "types", "abilities", "stats", "height", "weight", "data"],
-        ).points
+    # Fetching "data" here (unlike TEXT_PAYLOAD) is intentional — the tool
+    # needs the full moves list to give the LLM complete information.
+    vec = next(iter(get_text_embed_model().embed([query]))).tolist()
+    hits = get_qdrant().query_points(
+        collection_name=COLLECTION_TEXT,
+        query=vec,
+        limit=3,
+        with_payload=["name", "types", "abilities", "stats", "height", "weight", "data"],
+    ).points
 
-        if not hits:
-            return "No Pokemon found in the database for that query."
+    if not hits:
+        return "No Pokemon found in the database for that query."
 
-        # Format each result as plain text so the LLM can read it as a message.
-        parts = []
-        for hit in hits:
-            p = hit.payload
-            data = p.get("data", {})
-            moves = [m["move"]["name"].replace("-", " ") for m in data.get("moves", [])]
-            stats_str = ", ".join(f"{k}: {v}" for k, v in p.get("stats", {}).items())
-            parts.append(
-                f"Name: {p.get('name', '').replace('-', ' ').title()}\n"
-                f"Types: {', '.join(p.get('types', []))}\n"
-                f"Abilities: {', '.join(p.get('abilities', []))}\n"
-                f"Stats: {stats_str}\n"
-                f"Height: {p.get('height', 0) / 10:.1f}m  Weight: {p.get('weight', 0) / 10:.1f}kg\n"
-                f"Moves: {', '.join(moves)}"
-            )
-        # Separate multiple results with a visible divider so the LLM
-        # can clearly distinguish where one Pokemon's record ends and another begins.
-        return "\n\n---\n\n".join(parts)
-
-    return _search
+    parts = []
+    for hit in hits:
+        p = hit.payload
+        data = p.get("data", {})
+        moves = [m["move"]["name"].replace("-", " ") for m in data.get("moves", [])]
+        stats_str = ", ".join(f"{k}: {v}" for k, v in p.get("stats", {}).items())
+        parts.append(
+            f"Name: {p.get('name', '').replace('-', ' ').title()}\n"
+            f"Types: {', '.join(p.get('types', []))}\n"
+            f"Abilities: {', '.join(p.get('abilities', []))}\n"
+            f"Stats: {stats_str}\n"
+            f"Height: {p.get('height', 0) / 10:.1f}m  Weight: {p.get('weight', 0) / 10:.1f}kg\n"
+            f"Moves: {', '.join(moves)}"
+        )
+    return "\n\n---\n\n".join(parts)
