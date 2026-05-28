@@ -45,7 +45,7 @@ TEXT_PAYLOAD = ["name", "id", "types", "stats", "height", "weight", "artwork_url
 IMAGE_PAYLOAD = ["pokemon_id", "name", "artwork_url", "image_b64"]
 
 # ── Semantic cache ─────────────────────────────────────────────────────────────
-CACHE_TTL = 60 * 30   # entries expire after 30 min (in seconds)
+CACHE_TTL = 3600 * 48   # entries expire after 2 days
 CACHE_DISTANCE_THRESHOLD = 0.135  # cosine distance threshold (= 1 − 0.80 similarity)
                                  # 0.135 was too tight for short conversational questions —
                                  # "how it look?" and "how does it look?" were both missing
