@@ -8,6 +8,8 @@ import os
 QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
+REDIS_USERNAME = os.getenv("REDIS_USERNAME", "default")
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e4b")  # change to any Ollama model name
 
@@ -44,6 +46,6 @@ IMAGE_PAYLOAD = ["pokemon_id", "name", "artwork_url", "image_b64"]
 
 # ── Semantic cache ─────────────────────────────────────────────────────────────
 CACHE_TTL = 60 * 30   # entries expire after 30 min (in seconds)
-CACHE_DISTANCE_THRESHOLD = 0.12  # cosine distance threshold (= 1 − 0.80 similarity)
-                                 # 0.12 was too tight for short conversational questions —
+CACHE_DISTANCE_THRESHOLD = 0.135  # cosine distance threshold (= 1 − 0.80 similarity)
+                                 # 0.135 was too tight for short conversational questions —
                                  # "how it look?" and "how does it look?" were both missing

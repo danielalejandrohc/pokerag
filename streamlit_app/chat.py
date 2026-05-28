@@ -5,6 +5,16 @@ from clients import get_llm
 from search import search_pokemon
 
 
+def extract_text_content(content):
+    """Extract text from response content, handling both string and content-block formats."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        texts = [block.get("text", "") for block in content if block.get("type") == "text"]
+        return "".join(texts)
+    return str(content)
+
+
 def run_chat(pokemon_name: str, question: str, lc_messages: list) -> tuple[str, list]:
     """Run one user turn through the cache → LLM → tool loop.
 
@@ -38,11 +48,12 @@ def run_chat(pokemon_name: str, question: str, lc_messages: list) -> tuple[str, 
     for _ in range(5):
         response = llm_with_tools.invoke(messages)
         messages.append(response)
-
+        print(f"LLM response: {str(response)}  tool_calls={response.tool_calls}")
         # No tool calls → this is the final answer.
         if not response.tool_calls:
-            cache_store(pokemon_name, question, response.content)
-            return response.content, messages
+            text_content = extract_text_content(response.content)
+            cache_store(pokemon_name, question, text_content)
+            return text_content, messages
 
         # ── Tool execution (ReAct step) ────────────────────────────────────────
         # Run every tool call the model emitted and append a ToolMessage per
@@ -54,4 +65,5 @@ def run_chat(pokemon_name: str, question: str, lc_messages: list) -> tuple[str, 
 
     # Safety net: if we exhausted all iterations without a clean answer,
     # return whatever the last LLM response was.
-    return response.content, messages
+    text_content = extract_text_content(response.content)
+    return text_content, messages

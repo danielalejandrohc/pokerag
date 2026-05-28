@@ -11,3 +11,4 @@ langchain-core
 sentence-transformers
 torch 
 torchvision
+langchain-google-genai

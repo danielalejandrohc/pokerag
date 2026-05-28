@@ -20,6 +20,7 @@ TEXT_VECTOR_SIZE = 384   # BAAI/bge-small-en-v1.5
 IMAGE_VECTOR_SIZE = 512  # Qdrant/clip-ViT-B-32-vision
 MAX_WORKERS = 10
 
+_failed_pokemon_ids = set()
 _text_model: TextEmbedding | None = None
 _image_model: ImageEmbedding | None = None
 _text_model_lock = threading.Lock()
@@ -60,7 +61,11 @@ def _pokemon_to_text(data: dict) -> str:
 
 
 def get_qdrant_client() -> QdrantClient:
-    return QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
+    api_key = os.getenv("QDRANT_API_KEY")
+    if api_key:
+        return QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT, api_key=api_key)
+    else:
+        return QdrantClient(host=QDRANT_HOST, port=QDRANT_PORT)
 
 
 def ensure_collections_exist(client: QdrantClient) -> None:
@@ -71,12 +76,22 @@ def ensure_collections_exist(client: QdrantClient) -> None:
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=TEXT_VECTOR_SIZE, distance=Distance.COSINE),
         )
+        client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="name",
+            field_schema="keyword",
+        )
         print(f"Created collection '{COLLECTION_NAME}'")
 
     if IMAGES_COLLECTION_NAME not in existing:
         client.create_collection(
             collection_name=IMAGES_COLLECTION_NAME,
             vectors_config=VectorParams(size=IMAGE_VECTOR_SIZE, distance=Distance.COSINE),
+        )
+        client.create_payload_index(
+            collection_name=IMAGES_COLLECTION_NAME,
+            field_name="name",
+            field_schema="keyword",
         )
         print(f"Created collection '{IMAGES_COLLECTION_NAME}'")
 
@@ -177,6 +192,8 @@ def collections_are_ready(client: QdrantClient) -> bool:
 def process_prokemon_data(pokemon_list: list[dict]) -> None:
     client = get_qdrant_client()
     ensure_collections_exist(client)
+    global _failed_pokemon_ids
+    _failed_pokemon_ids = set()
 
     def fetch_and_store(pokemon: dict) -> None:
         try:
@@ -185,6 +202,7 @@ def process_prokemon_data(pokemon_list: list[dict]) -> None:
             print(f"[OK] {pokemon['name']}")
         except Exception as exc:
             print(f"[FAIL] {pokemon['name']}: {exc}")
+            _failed_pokemon_ids.add(pokemon["id"])
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         executor.map(fetch_and_store, pokemon_list)
@@ -198,3 +216,8 @@ if __name__ == "__main__":
         print("One or more collections missing — starting full load.")
         data = get_pokemon_data_in_local_memory()
         process_prokemon_data(data)
+        if _failed_pokemon_ids:
+            time.sleep(5)  # Brief pause before retrying failed entries
+            print(f"Failed to load data for Pokémon IDs: {_failed_pokemon_ids}")
+            retry_list = [p for p in data if p["id"] in _failed_pokemon_ids]
+            process_prokemon_data(retry_list)
