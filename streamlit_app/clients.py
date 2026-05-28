@@ -42,7 +42,7 @@ def get_semantic_cache():
     from redisvl.utils.vectorize import HFTextVectorizer
 
     if REDIS_PASSWORD:
-        print(f"Using Redis with authentication at {REDIS_URL} with username {REDIS_USERNAME}")
+        print(f"Using Redis with authentication")
         return SemanticCache(
             name="pokerag",
             vectorizer=HFTextVectorizer(CACHE_EMBED_MODEL),
