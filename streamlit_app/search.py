@@ -17,6 +17,7 @@ from config import (
     IMAGE_PAYLOAD,
     MAX_RESULTS,
     TEXT_PAYLOAD,
+    SCORE_THRESHOLD,
 )
 
 
@@ -44,7 +45,8 @@ def search_text(query: str):
         collection_name=COLLECTION_TEXT,
         query=vec,
         limit=MAX_RESULTS,
-        with_payload=TEXT_PAYLOAD,  # only fetch the display fields, not the huge "data" blob
+        with_payload=TEXT_PAYLOAD,  
+        score_threshold=SCORE_THRESHOLD,# only fetch the display fields, not the huge "data" blob
     ).points
 
     # The text collection doesn't store image_b64, so we do a second lookup
@@ -78,6 +80,7 @@ def search_image_by_phrase(phrase: str):
         query=vec,
         limit=MAX_RESULTS,
         with_payload=IMAGE_PAYLOAD,
+        score_threshold=SCORE_THRESHOLD,
     ).points
 
 
@@ -92,6 +95,7 @@ def search_image_by_upload(image_bytes: bytes):
         query=vec,
         limit=MAX_RESULTS,
         with_payload=IMAGE_PAYLOAD,
+        score_threshold=SCORE_THRESHOLD,
     ).points
 
 
@@ -158,6 +162,7 @@ def search_pokemon(query: str) -> str:
         query=vec,
         limit=3,
         with_payload=["name", "types", "abilities", "stats", "height", "weight", "data"],
+        score_threshold=SCORE_THRESHOLD,
     ).points
 
     if not hits:

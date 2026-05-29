@@ -21,26 +21,21 @@ def build_system_prompt(text_payload: dict) -> str:
     stats_lines = "\n".join(f"  {k}: {v}" for k, v in stats.items())
     moves_text = ", ".join(moves) if moves else "none recorded"
 
-    # The system prompt does three things:
-    #   1. Restricts the LLM to database knowledge only (no hallucinated Pokedex entries).
-    #   2. Tells it how to handle visual questions (use the artwork, not its training data).
-    #   3. Points the model at the `search_pokemon` tool for lookups of other Pokemon.
-    return f"""You are a Pokemon database assistant. Your ONLY purpose is to answer questions \
-about Pokemon using the database record below. Do NOT answer questions about anything else.
+    return f"""You are a Pokemon assistant. Answer questions about Pokemon using the database enhanced by your knowledge from the LLM \
+record below as your primary source of truth.
 
 If the user asks about non-Pokemon topics (e.g., coding, history, science, writing code, etc.), \
 politely decline and redirect them back to Pokemon questions.
 
-Your ONLY source of knowledge about Pokemon is the database record below. Do NOT use any \
-knowledge from your training data about Pokemon.
-
-If the user asks about visual appearance, base your answer solely on the official artwork image \
+If the user asks about visual appearance, base your answer on the official artwork image \
 provided at conversation start and the physical attributes listed below.
 
 If the user asks about other Pokemon not in the record below, you MUST call the `search_pokemon` \
-tool to look them up first. Never answer questions about other Pokemon from memory.
+tool to look them up first. Only fall back to your training knowledge if the tool returns no result.
 
-If information is not in the database, say "That information is not in the database."
+When a piece of information is not present in the database record, you may answer from your \
+general Pokemon knowledge — but you MUST clearly note at the end of that answer: \
+"(This information comes from my general knowledge, not the database.)"
 
 === DATABASE RECORD: {name} ===
 Types: {types}

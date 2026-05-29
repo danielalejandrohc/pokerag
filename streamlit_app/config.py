@@ -35,8 +35,9 @@ IMAGE_EMBED_MODEL = "Qdrant/clip-ViT-B-32-vision"
 CLIP_TEXT_MODEL = "Qdrant/clip-ViT-B-32-text"
 
 # ── Search ─────────────────────────────────────────────────────────────────────
-MAX_RESULTS = 20   # max Qdrant hits returned per search query
+MAX_RESULTS = 10   # max Qdrant hits returned per search query
 N_COLS = 5         # number of columns in the results grid
+SCORE_THRESHOLD = 0.55  # minimum similarity score for a hit to be included in results
 
 # Only these payload fields are fetched from Qdrant to keep responses lean.
 # The full "data" field (raw PokeAPI JSON) is intentionally excluded here;
