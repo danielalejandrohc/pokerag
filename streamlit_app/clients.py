@@ -1,6 +1,7 @@
 import streamlit as st
 import os
-from fastembed import ImageEmbedding, TextEmbedding
+from fastembed import TextEmbedding
+from sentence_transformers import SentenceTransformer
 from langchain_ollama import ChatOllama
 from qdrant_client import QdrantClient
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -79,21 +80,12 @@ def get_llm() -> ChatOllama:
 @st.cache_resource
 def get_text_embed_model() -> TextEmbedding:
     # Used for: text-based Pokemon search and semantic cache comparisons.
-    # Produces 384-dimensional vectors.
+    # Produces 768-dimensional vectors.
     return TextEmbedding(TEXT_EMBED_MODEL)
 
 
 @st.cache_resource
-def get_image_embed_model() -> ImageEmbedding:
-    # Used for: embedding uploaded images so they can be compared against
-    # stored Pokemon artwork vectors. Produces 512-dimensional CLIP vectors.
-    return ImageEmbedding(IMAGE_EMBED_MODEL)
-
-
-@st.cache_resource
-def get_clip_text_model() -> TextEmbedding:
-    # Used for: "describe what it looks like" search in the image tab.
-    # CLIP text and vision encoders share the same vector space, so a text
-    # phrase like "yellow electric mouse" can be compared directly against
-    # image embeddings without ever looking at the actual images.
-    return TextEmbedding(CLIP_TEXT_MODEL)
+def get_clip_model() -> SentenceTransformer:
+    # Shared model for both vision and text embeddings (CLIP).
+    # laion/CLIP-ViT-H-14 produces 1024-dimensional vectors.
+    return SentenceTransformer(IMAGE_EMBED_MODEL)

@@ -7,7 +7,8 @@ import concurrent.futures
 
 import requests
 from PIL import Image
-from fastembed import ImageEmbedding, TextEmbedding
+from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct
 
@@ -15,14 +16,13 @@ QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", 6333))
 
 COLLECTION_NAME = "pokemons"
-IMAGES_COLLECTION_NAME = "pokemon_images"
-TEXT_VECTOR_SIZE = 384   # BAAI/bge-small-en-v1.5
-IMAGE_VECTOR_SIZE = 512  # Qdrant/clip-ViT-B-32-vision
+TEXT_VECTOR_SIZE = 768   # BAAI/bge-base-en-v1.5
+IMAGE_VECTOR_SIZE = 1024  # laion/CLIP-ViT-H-14-laion2B-s32B-b79K
 MAX_WORKERS = 10
 
-_failed_pokemon_ids = set()
+_failed_pokemon_names = set()
 _text_model: TextEmbedding | None = None
-_image_model: ImageEmbedding | None = None
+_image_model: SentenceTransformer | None = None
 _text_model_lock = threading.Lock()
 _image_model_lock = threading.Lock()
 
@@ -31,15 +31,15 @@ def _get_text_model() -> TextEmbedding:
     global _text_model
     with _text_model_lock:
         if _text_model is None:
-            _text_model = TextEmbedding("BAAI/bge-small-en-v1.5")
+            _text_model = TextEmbedding("BAAI/bge-base-en-v1.5")
     return _text_model
 
 
-def _get_image_model() -> ImageEmbedding:
+def _get_image_model() -> SentenceTransformer:
     global _image_model
     with _image_model_lock:
         if _image_model is None:
-            _image_model = ImageEmbedding("Qdrant/clip-ViT-B-32-vision")
+            _image_model = SentenceTransformer("laion/CLIP-ViT-H-14-laion2B-s32B-b79K")
     return _image_model
 
 
@@ -74,7 +74,10 @@ def ensure_collections_exist(client: QdrantClient) -> None:
     if COLLECTION_NAME not in existing:
         client.create_collection(
             collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(size=TEXT_VECTOR_SIZE, distance=Distance.COSINE),
+            vectors_config={
+                "text": VectorParams(size=TEXT_VECTOR_SIZE, distance=Distance.COSINE),
+                "image": VectorParams(size=IMAGE_VECTOR_SIZE, distance=Distance.COSINE),
+            },
         )
         client.create_payload_index(
             collection_name=COLLECTION_NAME,
@@ -82,18 +85,6 @@ def ensure_collections_exist(client: QdrantClient) -> None:
             field_schema="keyword",
         )
         print(f"Created collection '{COLLECTION_NAME}'")
-
-    if IMAGES_COLLECTION_NAME not in existing:
-        client.create_collection(
-            collection_name=IMAGES_COLLECTION_NAME,
-            vectors_config=VectorParams(size=IMAGE_VECTOR_SIZE, distance=Distance.COSINE),
-        )
-        client.create_payload_index(
-            collection_name=IMAGES_COLLECTION_NAME,
-            field_name="name",
-            field_schema="keyword",
-        )
-        print(f"Created collection '{IMAGES_COLLECTION_NAME}'")
 
 
 def get_pokemon_data_in_local_memory() -> list[dict]:
@@ -129,12 +120,19 @@ def _store_pokemon(client: QdrantClient, entry: dict) -> None:
 
     text_vector = next(iter(_get_text_model().embed([_pokemon_to_text(pokemon_data)]))).tolist()
 
+    vectors: dict = {"text": text_vector}
+    image_b64 = None
+    if image_bytes:
+        image = Image.open(io.BytesIO(image_bytes))
+        vectors["image"] = _get_image_model().encode(image).tolist()
+        image_b64 = base64.b64encode(image_bytes).decode()
+
     client.upsert(
         collection_name=COLLECTION_NAME,
         points=[
             PointStruct(
                 id=pokemon_id,
-                vector=text_vector,
+                vector=vectors,
                 payload={
                     "name": pokemon_data["name"],
                     "id": pokemon_id,
@@ -144,31 +142,12 @@ def _store_pokemon(client: QdrantClient, entry: dict) -> None:
                     "height": pokemon_data.get("height"),
                     "weight": pokemon_data.get("weight"),
                     "artwork_url": artwork_url,
+                    "image_b64": image_b64,
                     "data": pokemon_data,
                 },
             )
         ],
     )
-
-    if image_bytes:
-        image = Image.open(io.BytesIO(image_bytes))
-        clip_vector = next(iter(_get_image_model().embed([image]))).tolist()
-
-        client.upsert(
-            collection_name=IMAGES_COLLECTION_NAME,
-            points=[
-                PointStruct(
-                    id=pokemon_id,
-                    vector=clip_vector,
-                    payload={
-                        "pokemon_id": pokemon_id,
-                        "name": pokemon_data["name"],
-                        "artwork_url": artwork_url,
-                        "image_b64": base64.b64encode(image_bytes).decode(),
-                    },
-                )
-            ],
-        )
 
 
 def wait_for_qdrant(max_retries: int = 30, delay: int = 2) -> QdrantClient:
@@ -186,14 +165,14 @@ def wait_for_qdrant(max_retries: int = 30, delay: int = 2) -> QdrantClient:
 
 def collections_are_ready(client: QdrantClient) -> bool:
     existing = {c.name for c in client.get_collections().collections}
-    return COLLECTION_NAME in existing and IMAGES_COLLECTION_NAME in existing
+    return COLLECTION_NAME in existing
 
 
 def process_prokemon_data(pokemon_list: list[dict]) -> None:
     client = get_qdrant_client()
     ensure_collections_exist(client)
-    global _failed_pokemon_ids
-    _failed_pokemon_ids = set()
+    global _failed_pokemon_names
+    _failed_pokemon_names = set()
 
     def fetch_and_store(pokemon: dict) -> None:
         try:
@@ -202,7 +181,7 @@ def process_prokemon_data(pokemon_list: list[dict]) -> None:
             print(f"[OK] {pokemon['name']}")
         except Exception as exc:
             print(f"[FAIL] {pokemon['name']}: {exc}")
-            _failed_pokemon_ids.add(pokemon["id"])
+            _failed_pokemon_names.add(pokemon["name"])
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
         executor.map(fetch_and_store, pokemon_list)
@@ -211,13 +190,13 @@ def process_prokemon_data(pokemon_list: list[dict]) -> None:
 if __name__ == "__main__":
     client = wait_for_qdrant()
     if collections_are_ready(client):
-        print("Both collections already exist — skipping load.")
+        print("Collection already exists — skipping load.")
     else:
         print("One or more collections missing — starting full load.")
         data = get_pokemon_data_in_local_memory()
         process_prokemon_data(data)
-        if _failed_pokemon_ids:
+        if _failed_pokemon_names:
             time.sleep(5)  # Brief pause before retrying failed entries
-            print(f"Failed to load data for Pokémon IDs: {_failed_pokemon_ids}")
-            retry_list = [p for p in data if p["id"] in _failed_pokemon_ids]
+            print(f"Failed to load data for Pokémon: {_failed_pokemon_names}")
+            retry_list = [p for p in data if p["name"] in _failed_pokemon_names]
             process_prokemon_data(retry_list)

@@ -5,7 +5,7 @@ import streamlit as st
 from config import N_COLS
 
 
-def render_card(col, payload: dict, score: float, use_b64: bool = False) -> None:
+def render_card(col, payload: dict, score: float, use_b64: bool = False, source: str | None = None) -> None:
     """Render a single Pokemon result card inside the given Streamlit column."""
     with col:
         # Prefer the locally stored base64 image (from the image collection)
@@ -20,8 +20,8 @@ def render_card(col, payload: dict, score: float, use_b64: bool = False) -> None
         name = payload.get("name", "?").replace("-", " ").title()
         st.markdown(f"**{name}**")
 
-        # Show the similarity score as a percentage (e.g. "87.3%").
-        st.caption(f"Similarity: {score:.1%}")
+        source_label = f" · via {source}" if source else ""
+        st.caption(f"Similarity: {score:.1%}{source_label}")
 
         types = payload.get("types", [])
         if types:
@@ -62,5 +62,6 @@ def render_grid(hits, use_b64: bool = False) -> None:
     # Slice the hits into rows of N_COLS, creating a new set of columns per row.
     for i in range(0, len(hits), N_COLS):
         cols = st.columns(N_COLS)
-        for col, hit in zip(cols, hits[i: i + N_COLS]):
-            render_card(col, hit.payload, hit.score, use_b64)
+        for col, item in zip(cols, hits[i: i + N_COLS]):
+            hit, source = item if isinstance(item, tuple) else (item, None)
+            render_card(col, hit.payload, hit.score, use_b64, source=source)

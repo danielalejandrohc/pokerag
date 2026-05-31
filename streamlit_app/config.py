@@ -13,11 +13,10 @@ REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma4:e4b")  # change to any Ollama model name
 
-# ── Qdrant collections ─────────────────────────────────────────────────────────
-# Two separate collections: one stores text embeddings (stats, moves, etc.),
-# the other stores CLIP image embeddings (visual similarity).
-COLLECTION_TEXT = "pokemons"
-COLLECTION_IMAGES = "pokemon_images"
+# ── Qdrant collection ──────────────────────────────────────────────────────────
+# Single collection with named vectors: "text" (BGE) and "image" (CLIP).
+# Each point holds the full Pokemon payload including image_b64.
+COLLECTION_NAME = "pokemons"
 
 # ── Embedding models ───────────────────────────────────────────────────────────
 # TEXT_EMBED_MODEL  — BGE model used for Qdrant text search. Must match the
@@ -29,21 +28,22 @@ COLLECTION_IMAGES = "pokemon_images"
 # IMAGE_EMBED_MODEL — CLIP vision encoder; embeds actual Pokemon artwork.
 # CLIP_TEXT_MODEL   — CLIP text encoder; same vector space as the vision
 #                     encoder, so text phrases can be compared against images.
-TEXT_EMBED_MODEL = "BAAI/bge-small-en-v1.5"
+TEXT_EMBED_MODEL = "BAAI/bge-base-en-v1.5"
 CACHE_EMBED_MODEL = "redis/langcache-embed-v1"
-IMAGE_EMBED_MODEL = "Qdrant/clip-ViT-B-32-vision"
-CLIP_TEXT_MODEL = "Qdrant/clip-ViT-B-32-text"
+IMAGE_EMBED_MODEL = "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"
+CLIP_TEXT_MODEL = "laion/CLIP-ViT-H-14-laion2B-s32B-b79K"
 
 # ── Search ─────────────────────────────────────────────────────────────────────
-MAX_RESULTS = 10   # max Qdrant hits returned per search query
+MAX_RESULTS = 30   # max Qdrant hits returned per search query
 N_COLS = 5         # number of columns in the results grid
-SCORE_THRESHOLD = 0.55  # minimum similarity score for a hit to be included in results
+SCORE_THRESHOLD = 0.55        # BGE text-to-text cosine similarity (tight range: 0.6–0.9)
+IMAGE_SCORE_THRESHOLD = 0.20  # CLIP text/image-to-image cosine similarity (loose range: 0.2–0.35)
 
 # Only these payload fields are fetched from Qdrant to keep responses lean.
 # The full "data" field (raw PokeAPI JSON) is intentionally excluded here;
 # it is only fetched when the RAG context or tool needs the complete moves list.
-TEXT_PAYLOAD = ["name", "id", "types", "stats", "height", "weight", "artwork_url"]
-IMAGE_PAYLOAD = ["pokemon_id", "name", "artwork_url", "image_b64"]
+TEXT_PAYLOAD = ["name", "id", "types", "stats", "height", "weight", "artwork_url", "image_b64"]
+IMAGE_PAYLOAD = ["id", "name", "artwork_url", "image_b64"]
 
 # ── Semantic cache ─────────────────────────────────────────────────────────────
 CACHE_TTL = 3600 * 48   # entries expire after 2 days

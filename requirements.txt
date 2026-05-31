@@ -12,3 +12,4 @@ sentence-transformers
 torch 
 torchvision
 langchain-google-genai
+sentence-transformers
